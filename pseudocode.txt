@@ -1,0 +1,21 @@
+make a start node
+make an end node
+
+add start node to hte open set
+s score of the start node is 0
+g score is euclidian distance from the start node to the end node
+
+while the open set is not empty
+  choose the top node (priority node)
+  if prioirty == goal
+    make teh path
+  else
+    add the priority node to the closed set
+    get the neighbors of hte prioirty node
+    iterat through neighbors
+    if the neighbor is in the closed set skip it
+    otherwise calculate the g score of the neighbor
+      add the distance from the priority node to this node to the s score of the prioirty node
+      if the neighbor node is not in the open set, add it to the open set
+      if it is in the open set, but the g score of the neighbor node is less than what it previously was in the open set
+      ,then change its g score to the recently calculated one
