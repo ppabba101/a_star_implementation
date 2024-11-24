@@ -14,8 +14,8 @@ using namespace std;
 
 struct Node {
   int x, y;               // Coordinates
-  double s_cost;          // Cost from start node
-  double g_cost;          // Heuristic cost to goal node
+  int s_cost;          // Cost from start node
+  int g_cost;          // Heuristic cost to goal node
   bool walkable;          // True if the node is traversable
   Node* parent;
 
@@ -24,6 +24,9 @@ struct Node {
     os << "Walkable: " << (node.walkable ? "Yes" : "No") << ", ";
     os << "s_cost: " << node.s_cost << ", ";
     os << "g_cost: " << node.g_cost << ", ";
+    if (node.parent) {
+      os << "parent coords: " << node.parent->x << ", " << node.parent->y << endl;
+    }
     return os;
   }
 };
@@ -139,22 +142,53 @@ double enc_dist(double x1, double y1, double x2, double y2) {
     return sqrt(pow(x2 - x1, 2) + pow(y2 - y1, 2));
 }
 
+int approx_dist(int x1, int y1, int x2, int y2) {
+  int dx = abs(x2 - x1);
+  int dy = abs(y2 - y1); 
+
+  int min_d = min(dx, dy); 
+  if (dx >= dy){
+    return 14 * min_d + 10 * (dx - dy);
+  }
+  else {
+    return 14 * min_d + 10 * (dy - dx);
+  }
+  
+}
+
+void print_set(set<pair<int, int> > s) {
+  for (const auto node : s) {
+    cout << "(" << node.first << ", " << node.second << "), ";
+  }
+  cout << endl; 
+}
+
 int main(int argc, char* argv[]) {
+  cout << "tests" << endl;
   Map map("ten_ten.txt");
+
   //Node start
   Node start = {1, 2, 0, 0, true, nullptr};
   //Node end
   Node end = {7, 6, 0, 0, true, nullptr};
   struct f_cost {
     bool operator()(Node const& n1, Node const& n2){
-      return n1.s_cost + n1.g_cost < n2.s_cost + n2.g_cost;
+      if (n1.s_cost + n1.g_cost == n2.s_cost + n2.g_cost){
+        return n1.g_cost > n2.g_cost;
+      }
+      else { 
+        return n1.s_cost + n1.g_cost > n2.s_cost + n2.g_cost;
+      }
     }
   };
+  cout << "two" << endl;
+  cout << start << endl;
 
   priority_queue<Node, std::vector<Node>, f_cost> open;
   set<pair<int, int> > closed;
 
-  start.g_cost = enc_dist(start.x, start.y, end.x, end.y);
+  start.g_cost = approx_dist(start.x, start.y, end.x, end.y);
+  cout << start << endl;
 
   open.push(start);
   bool finished = false;
@@ -162,35 +196,50 @@ int main(int argc, char* argv[]) {
     Node priority = open.top();
     int px = priority.x;
     int py = priority.y;
-    
+    // pair<int, int> pcoords(px, py); 
     open.pop();
     if (priority.x == end.x && priority.y == end.y) {
+      cout << "Found path, going through past nodes..." << endl; 
       Node * current = &priority;
+      cout << "End node: " << *current << endl; 
       vector<pair<int, int> > path;
-      while(current->x != start.x && current->y != start.y) {
+      int count = 0; 
+      while(current->x != start.x && current->y != start.y && count < 10) {
         path.push_back(pair<int, int> (current->x, current->y));
+        for (const auto node : path) {
+          cout << "(" << node.first << ", " << node.second << "), ";
+        }
+        cout << endl; 
         current = current->parent;
+        cout << "Current node: " << *current << endl; 
+        count++; 
       }
       path.push_back(pair<int, int> (current->x, current->y));
       finished = true;
       map.visualizePath(pair<int, int> (start.x, start.y), pair<int, int> (end.x, end.y), path);
-      
+      break;
     }
-    else {
+    else if (closed.find(pair<int, int> (px, py)) == closed.end()) {
       closed.insert(pair<int, int> (px, py));
       vector<pair<int, int> > neighbors = map.get_neighbors(px, py);
+      cout << "Neighbors of priority: " << priority << endl; 
+      for (const auto node : neighbors) {
+          cout << "(" << node.first << ", " << node.second << "), ";
+        }
+      cout << endl; 
       for (int i = 0; i < neighbors.size(); i++) {
         int nx = neighbors[i].first;
         int ny = neighbors[i].second;
         //if the neighbor is not in the closed set
-        if (closed.find(neighbors[i]) != closed.end()) {
-          double s_cost = priority.s_cost + enc_dist(px, py, nx, ny);
-          double g_cost = enc_dist(end.x, end.y, nx, ny);
+        if (closed.find(neighbors[i]) == closed.end()) {
+          int s_cost = priority.s_cost + approx_dist(px, py, nx, ny);
+          int g_cost = approx_dist(end.x, end.y, nx, ny);
           Node current = {nx, ny ,s_cost, g_cost, true, &priority};
 
           open.push(current);
         }
       }
     }
+    print_set(closed);
   }  
 }
