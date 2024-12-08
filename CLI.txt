@@ -1,3 +1,0 @@
-input provided like this
-
-./astar.exe 

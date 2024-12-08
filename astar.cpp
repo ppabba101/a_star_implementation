@@ -2,266 +2,251 @@
 #include <cmath>
 #include <iostream>
 #include <fstream>
-#include <ostream>
-#include <unordered_map>
-#include <utility>
+#include <sstream>
 #include <queue>
 #include <set>
-#include <unordered_set>
+#include <utility>
+#include <stdexcept>
 
 using namespace std;
 
 struct Node {
-  int x, y;               // Coordinates
-  double s_cost;          // Cost from start node
-  double g_cost;          // Heuristic cost to goal node
-  bool walkable;          // True if the node is traversable
-  Node* parent; 
+    int x, y;          // Coordinates of the node in the grid
+    int s_cost;        // Cost from the start node to this node
+    int g_cost;        // Heuristic (estimated) cost from this node to the goal node
+    bool walkable;     // True if the node can be walked on
+    Node* parent;      // Pointer to the parent node (for path reconstruction)
 
-  Node(int x, int y, bool walkable = true) 
-    : x(x), y(y), s_cost(INFINITY), g_cost(INFINITY), walkable(walkable) {}
+    Node(int x, int y, int s_cost, int g_cost, bool walkable, Node* parent)
+        : x(x), y(y), s_cost(s_cost), g_cost(g_cost), walkable(walkable), parent(parent) {}
 
-  double f_cost() const { return s_cost + g_cost; }
-
-  friend ostream& operator<<(ostream& os, const Node& node) {
-    os << "Node(" << node.x << ", " << node.y << ") - ";
-    os << "Walkable: " << (node.walkable ? "Yes" : "No") << ", ";
-    os << "s_cost: " << node.s_cost << ", ";
-    os << "g_cost: " << node.g_cost << ", ";
-    os << "f_cost: " << node.f_cost();
-    return os;
-  }
-};
-
-// Custom hash function for Node to use in unordered_set
-struct NodeHash {
-  size_t operator()(const Node& node) const {
-    return hash<int>()(node.x) ^ hash<int>()(node.y);
-  }
-};
-
-class UniqueNodeQueue {
-private:
-  queue<Node> q;
-  unordered_set<Node, NodeHash> nodeSet; // To track unique nodes
-
-public:
-  // Adds a node if it's not already in the queue
-  bool push(const Node& node) {
-    if (nodeSet.find(node) == nodeSet.end()) { // Not found in the set
-      q.push(node);
-      nodeSet.insert(node);
-      return true; // Node was successfully added
+    // Overload output operator for debugging
+    friend ostream& operator<<(ostream& os, const Node& node) {
+        os << "Node(" << node.x << ", " << node.y << ") - "
+           << "Walkable: " << (node.walkable ? "Yes" : "No") << ", "
+           << "s_cost: " << node.s_cost << ", "
+           << "g_cost: " << node.g_cost << ", ";
+        if (node.parent) {
+            os << "parent coords: " << node.parent->x << ", " << node.parent->y << endl;
+        }
+        return os;
     }
-    return false; // Node was already in the queue
-  }
-
-  // Removes a node from the front of the queue
-  bool pop() {
-    if (q.empty()) return false;
-
-    Node node = q.front();
-    q.pop();
-    nodeSet.erase(node); // Remove from set as well
-    return true;
-  }
-
-  // Access the front node in the queue
-  Node front() const {
-    return q.front();
-  }
-
-  // Check if the queue is empty
-  bool empty() const {
-    return q.empty();
-  }
-
-  // Get the size of the queue
-  size_t size() const {
-    return q.size();
-  }
 };
 
 class Map {
 private:
-  vector<vector<Node>> grid;
-  int width, height;
+    vector<vector<bool> >  grid; 
+    int rows, cols;
+
+    // Check if a given coordinate is inside the grid boundaries
+    bool isInBounds(int x, int y) const {
+        return x >= 0 && x < rows && y >= 0 && y < cols;
+    }
 
 public:
-  // Constructor to initialize map with given width and height
-  Map(int width, int height) : width(width), height(height) {
-    grid.resize(height, vector<Node>(width, Node(0, 0, true)));
-    for (int y = 0; y < height; y++)
-      for (int x = 0; x < width; x++)
-        grid[y][x] = Node(x, y);
-  }
-
-  Map(const string& filename) {
-    ifstream file(filename);
-    if (!file.is_open()) {
-      cerr << "Error: Unable to open file " << filename << endl;
-      return;
+    // Constructor: initialize the map from a 2D grid of booleans
+    Map(const vector<vector<bool> > & grid) : grid(grid) {
+        rows = (int)grid.size();
+        cols = rows > 0 ? (int)grid[0].size() : 0;
     }
 
-    string line;
-    vector<vector<bool>> temp_grid;
-    while (getline(file, line)) {
-      vector<bool> row;
-      for (char ch : line) {
-        if (ch == '1') {
-          row.push_back(false);  // Wall
-        } else if (ch == '0') {
-          row.push_back(true);   // Walkable space
+    // Constructor: initialize the map from a file
+    // File lines contain '0' for walkable and '1' for non-walkable squares
+    Map(const string& filename) {
+        ifstream file(filename);
+        if (!file.is_open()) {
+            throw runtime_error("Could not open file");
         }
-      }
-      temp_grid.push_back(row);
-    }
-    file.close();
 
-    // Set dimensions based on file input
-    height = temp_grid.size();
-    width = height > 0 ? temp_grid[0].size() : 0;
-
-    // Initialize the grid of nodes
-    grid.resize(height, vector<Node>(width, Node(0, 0, true)));
-    for (int y = 0; y < height; y++) {
-      for (int x = 0; x < width; x++) {
-        grid[y][x] = Node(x, y, temp_grid[y][x]);
-      }
-    }
-  }
-
-
-  // Accessor for a node at specific coordinates
-  Node& getNode(int x, int y) {
-    return grid[y][x];
-  }
-
-  // Check if a coordinate is within map boundaries
-  bool inBounds(int x, int y) const {
-    return x >= 0 && x < width && y >= 0 && y < height;
-  }
-
-  // Get neighbors for a given node (4 or 8 directions)
-  vector<Node*> get_neighbors(int x, int y) {
-    vector<Node*> neighbors;
-    static const int directions[8][2] = {{1, 0}, {1, 1}, {0, 1}, {-1, 1}, {0, -1}, {-1, -1}, {0, -1}, {1, -1}};  // 4-directional
-
-    for (auto& d : directions) {
-      int nx = x + d[0], ny = y + d[1];
-      if (inBounds(nx, ny) && grid[ny][nx].walkable)
-        neighbors.push_back(&grid[ny][nx]);
-    }
-    return neighbors;
-  }
-
-  
-
-  // Calculate the heuristic (e.g., Manhattan distance)
-  double heuristic(const Node& start, const Node& goal) {
-    return (start.x - goal.x) + (start.y - goal.y);
-  }
-
-
-  vector<Node*> find_path(Node &start, const Node &goal) {
-    // UniqueNodeQueue q;
-    // set<Node> done;
-    // vector<Node> path;
-
-    struct f_cost {
-      bool operator()(Node * const& n1, Node * const& n2){
-        return n1->f_cost() < n2->f_cost();
-      }
-    };
-
-    priority_queue<Node*, std::vector<Node*>, f_cost> open;
-    set<pair<int, int>> open_set; 
-    set<Node> closed; 
-    
-
-    open.push(&start);
-  
-
-    while (open.size() > 0){
-      Node * priority = open.top();
-      open.pop();
-      open_set.erase(pair(priority->x, priority->y));
-     
-      // Check if we've reached the goal
-      if (priority->x == goal.x && priority->y == goal.y) {
-        vector<Node*> path; 
-        // Loop back through the parents to get the entire path
-        while (priority->parent){
-          path.push_back(priority->parent);
-          priority = priority->parent; 
-        }
-      }
-
-      //haven't reached the goal, add the neighbors to the queue
-      else {
-        closed.insert(*priority);
-
-        // change get_neighbors so that it has nodes whose s_score is a delta from the current node
-        vector<Node*> n = get_neighbors(priority->x, priority->y);
-        for (int i = 0; i < n.size(); i++) {
-          //if it hasn't already been looked at
-          if (closed.find(*n[i]) == closed.end()){
-            open.push(n[i]);
-            // If not in the open set
-            if (open_set.find(pair(priority->x, priority->y)) == open_set.end()) {
-              open_set.insert(pair(priority->x, priority->y));
-              open.push(n[i]);
-            } 
-            // if the s_score of the current node is less than what it is in the prioirty queue
-
-            if (n[i]->s_cost < priority->s_cost) {
-              n[i]->s_cost = 
+        string line;
+        while (getline(file, line)) {
+            vector<bool> row;
+            istringstream stream(line);
+            char value;
+            while (stream >> value) {
+                if (value == '0') {
+                    row.push_back(true);   // '0' = walkable cell
+                } else if (value == '1') {
+                    row.push_back(false);  // '1' = non-walkable cell
+                }
             }
-            //modify the s score of the element in the priority queue
-            
-          }
-          
-          
-          
-        } 
-      }
-      
+            if (!row.empty()) {
+                grid.push_back(row);
+            }
+        }
+
+        file.close();
+        rows = (int)grid.size();
+        cols = rows > 0 ? (int)grid[0].size() : 0;
     }
 
-    
-      
+    // Returns the walkable neighbors of a cell (including diagonals)
+    vector<pair<int, int> >  get_neighbors(int x, int y) const {
+        vector<pair<int, int> >  neighbors;
 
-    //while openset isn't empty and the current node is not the goal node
-    
-    //
-    int min_g_cost = -1;
-    int index = 0;
-    for (int i = 0; i < n.size(); i++) {
-      if (n[i]->g_cost < min_g_cost) {
-        min_g_cost = n[i]->g_cost;
-        index = 0;
-      }
+        // Possible directions (8-directional movement)
+        static const int directions[8][2] = {
+            {1, 0}, {1, 1}, {0, 1}, {-1, 1},
+            {0, -1}, {-1, -1}, {0, -1}, {1, -1}
+        };
+
+        for (const auto& dir : directions) {
+            int nx = x + dir[0];
+            int ny = y + dir[1];
+            if (isInBounds(nx, ny) && grid[nx][ny]) {
+                neighbors.emplace_back(nx, ny);
+            }
+        }
+        return neighbors;
     }
-    path.push_back(*n[index]);
-    
-  }
 
+    // Print the map with the found path, start and end points
+    void visualizePath(const pair<int, int>& start, const pair<int, int>& end, const vector<pair<int, int> > & path) const {
+        vector<vector<char> >  visualization(grid.size(), vector<char>(grid[0].size(), ' '));
 
+        // Fill visualization based on walkable/non-walkable
+        for (size_t i = 0; i < grid.size(); ++i) {
+            for (size_t j = 0; j < grid[i].size(); ++j) {
+                visualization[i][j] = grid[i][j] ? '.' : '#';
+            }
+        }
+
+        // Mark the path
+        for (const auto& point : path) {
+            visualization[point.first][point.second] = '*';
+        }
+
+        // Mark start and end
+        visualization[start.first][start.second] = 'S';
+        visualization[end.first][end.second] = 'E';
+
+        // Print the visualization
+        for (const auto& row : visualization) {
+            for (char cell : row) {
+                cout << cell << ' ';
+            }
+            cout << '\n';
+        }
+    }
 };
 
+// Approximate distance (cost) between two points using a diagonal movement-friendly heuristic
+int approx_dist(int x1, int y1, int x2, int y2) {
+    int dx = abs(x2 - x1);
+    int dy = abs(y2 - y1);
+    int min_d = min(dx, dy);
+
+    // If dx == dy, distance is roughly 14 per diagonal step, 
+    // otherwise combine diagonal (14 each) and straight moves (10 each)
+    if (dx >= dy) {
+        return 14 * min_d + 10 * (dx - dy);
+    } else {
+        return 14 * min_d + 10 * (dy - dx);
+    }
+}
+
 int main(int argc, char* argv[]) {
-  UniqueNodeQueue q;
-  // Example usage
-  int map_width = 10, map_height = 10;
-  Map map(map_width, map_height);
+    if (argc < 2) {
+        cerr << "Usage: " << argv[0] << " <map_filename> [start_x start_y end_x end_y]" << endl;
+        return 1;
+    }
 
-  // Set up some obstacles
-  map.getNode(3, 3).walkable = false;
-  bool found = false;
+    string filename = argv[1];
 
-  // Example neighbors access
-  auto neighbors = map.getNeighbors(2, 2);
-  for (auto n : neighbors) {
-    cout << "Neighbor at (" << n->x << ", " << n->y << ")\n";
-  }
+    // Default start and end coordinates if not provided
+    int startX = 1;
+    int startY = 2;
+    int endX   = 7;
+    int endY   = 6;
+
+    if (argc >= 6) {
+        startX = stoi(argv[2]);
+        startY = stoi(argv[3]);
+        endX   = stoi(argv[4]);
+        endY   = stoi(argv[5]);
+    }
+
+    Node* start = new Node(startX, startY, 0, 0, true, nullptr);
+    Node* end   = new Node(endX, endY, 0, 0, true, nullptr);
+
+    Map map(filename);
+
+    // Custom comparator for the priority queue, sorts by f_cost = s_cost + g_cost
+    struct f_cost {
+        bool operator()(Node* const& n1, Node* const& n2) {
+            int f1 = n1->s_cost + n1->g_cost;
+            int f2 = n2->s_cost + n2->g_cost;
+            if (f1 == f2) {
+                return n1->g_cost > n2->g_cost; // Tie-break by g_cost
+            }
+            return f1 > f2;
+        }
+    };
+
+    // Priority queue (min-heap) for open set (nodes to explore)
+    priority_queue<Node*, vector<Node*>, f_cost> open;
+    set<pair<int, int> >  closed; // Set of visited (closed) nodes
+
+    // Initialize start node's heuristic cost
+    start->g_cost = approx_dist(start->x, start->y, end->x, end->y);
+    open.push(start);
+
+    bool finished = false;
+
+    // A* search loop
+    while (!open.empty() && !finished) {
+        // Get the node with the lowest f_cost
+        Node* priority = open.top();
+        open.pop();
+
+        int px = priority->x;
+        int py = priority->y;
+
+        // Check if we reached the goal
+        if (px == end->x && py == end->y) {
+            cout << "Found path, reconstructing..." << endl;
+            vector<pair<int, int> >  path;
+            Node* current = priority;
+
+            // Trace back the path from goal to start
+            while (!(current->x == start->x && current->y == start->y)) {
+                path.push_back(pair<int, int>(current->x, current->y));
+                current = current->parent;
+            }
+            path.push_back(pair<int, int>(current->x, current->y));
+
+            // Visualize the path on the map
+            map.visualizePath(pair<int, int>(start->x, start->y), pair<int, int>(end->x, end->y), path);
+            finished = true;
+            break;
+        }
+
+        // If not reached goal, process neighbors if this node wasn't already processed
+        if (closed.find(pair<int, int>(px, py)) == closed.end()) {
+            closed.insert(pair<int, int>(px, py));
+            vector<pair<int, int> >  neighbors = map.get_neighbors(px, py);
+
+            // For each walkable neighbor
+            for (auto& nb : neighbors) {
+                if (closed.find(nb) == closed.end()) {
+                    int nx = nb.first;
+                    int ny = nb.second;
+
+                    // Calculate new costs
+                    int s_cost = priority->s_cost + approx_dist(px, py, nx, ny);
+                    int g_cost = approx_dist(end->x, end->y, nx, ny);
+
+                    // Create a new node for this neighbor
+                    Node* current = new Node(nx, ny, s_cost, g_cost, true, priority);
+                    open.push(current);
+                }
+            }
+        }
+    }
+
+    if (!finished) {
+        cout << "No valid path found." << endl;
+    }
+
+    return 0;
 }

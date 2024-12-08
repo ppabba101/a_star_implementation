@@ -1,21 +1,31 @@
-make a start node
-make an end node
+Initialize start_node
+Initialize end_node
 
-add start node to hte open set
-s score of the start node is 0
-g score is euclidian distance from the start node to the end node
+Add start_node to open_set
+Set start_node.s_score = 0
+Set start_node.g_score = distance(start_node, end_node)
 
-while the open set is not empty
-  choose the top node (priority node)
-  if prioirty == goal
-    make teh path
-  else
-    add the priority node to the closed set
-    get the neighbors of hte prioirty node
-    iterat through neighbors
-    if the neighbor is in the closed set skip it
-    otherwise calculate the g score of the neighbor
-      add the distance from the priority node to this node to the s score of the prioirty node
-      if the neighbor node is not in the open set, add it to the open set
-      if it is in the open set, but the g score of the neighbor node is less than what it previously was in the open set
-      ,then change its g score to the recently calculated one
+while open_set is not empty:
+    priority_node = node in open_set with the lowest (s_score + g_score)
+    
+    if priority_node == end_node:
+        reconstruct_path(end_node)
+        break
+    else:
+        move priority_node from open_set to closed_set
+        neighbors = get_neighbors(priority_node)
+        
+        for neighbor in neighbors:
+            if neighbor is in closed_set:
+                continue
+            
+            tentative_s_score = priority_node.s_score + distance(priority_node, neighbor)
+            
+            if neighbor not in open_set:
+                neighbor.s_score = tentative_s_score
+                neighbor.g_score = distance(neighbor, end_node)
+                add neighbor to open_set
+            else if tentative_s_score < neighbor.s_score:
+                neighbor.s_score = tentative_s_score
+                neighbor.g_score = distance(neighbor, end_node)
+                update neighbor in open_set
