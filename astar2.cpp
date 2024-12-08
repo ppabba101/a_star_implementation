@@ -19,9 +19,11 @@ struct Node {
   bool walkable;          // True if the node is traversable
   Node* parent;
 
+  //node constructor
   Node(int x, int y, int s_cost, int g_cost, bool walkable, Node * parent) : 
   x(x), y(y), s_cost(s_cost), g_cost(g_cost), walkable(walkable), parent(parent) {}
 
+  //node printer
   friend ostream& operator<<(ostream& os, const Node& node) {
     os << "Node(" << node.x << ", " << node.y << ") - ";
     os << "Walkable: " << (node.walkable ? "Yes" : "No") << ", ";
@@ -141,11 +143,8 @@ public:
 
 };
 
-double enc_dist(double x1, double y1, double x2, double y2) {
-    return sqrt(pow(x2 - x1, 2) + pow(y2 - y1, 2));
-}
-
 int approx_dist(int x1, int y1, int x2, int y2) {
+
   int dx = abs(x2 - x1);
   int dy = abs(y2 - y1); 
 
@@ -156,7 +155,6 @@ int approx_dist(int x1, int y1, int x2, int y2) {
   else {
     return 14 * min_d + 10 * (dy - dx);
   }
-  
 }
 
 void print_set(set<pair<int, int> > s) {
@@ -181,6 +179,7 @@ int main(int argc, char* argv[]) {
   
   // Cost function to optimize and prioritize nodes
   struct f_cost {
+    //functor for the priority queue, determines what the prioirty queue is sorting by
     bool operator()(Node * const& n1, Node * const& n2){
       if (n1->s_cost + n1->g_cost == n2->s_cost + n2->g_cost){
         return n1->g_cost > n2->g_cost;
@@ -191,14 +190,12 @@ int main(int argc, char* argv[]) {
     }
   };
 
-  cout << "two" << endl;
-  cout << start << endl;
-
+  //             node ptr                   dist to start + dist to goal
   priority_queue<Node*, std::vector<Node*>, f_cost> open;
   set<pair<int, int> > closed;
 
   start->g_cost = approx_dist(start->x, start->y, end->x, end->y);
-  cout << *start << endl;
+  // cout << *start << endl;
 
   // Putting the start node into the open set to start searching from
   open.push(start);
@@ -215,49 +212,44 @@ int main(int argc, char* argv[]) {
     // Remove the node from open set
     open.pop();
 
-    // If we've found the end point 
+    // If the node we just pulled is the end point  
     if (priority->x == end->x && priority->y == end->y) {
       cout << "Found path, going through past nodes..." << endl; 
       Node * current = priority;
       cout << "End node: " << *current << endl; 
       vector<pair<int, int> > path;
 
-      // Go through parent nodes of current node until start node is hit
+      // Then recursively go through parent nodes of current node until start node is hit,
+      // adding each node in the sequence to a vector of node coordinates
       while(!(current->x == start->x && current->y == start->y)) {
-        path.push_back(pair<int, int> (current->x, current->y));
-        for (const auto node : path) {
-          cout << "(" << node.first << ", " << node.second << "), ";
-        }
-        cout << endl; 
+        //add the end to the path
+        path.push_back(pair<int, int> (current->x, current->y));    
         current = current->parent;
-        cout << "Current node: " << *current << endl; 
       }
+
+      // adds the start to the path
       path.push_back(pair<int, int> (current->x, current->y));
       finished = true;
-      for (auto coords : path){
-        cout << "(" << coords.first << ", " << coords.second << "), "; 
-      }
-      cout << endl; 
+
       map.visualizePath(pair<int, int> (start->x, start->y), pair<int, int> (end->x, end->y), path);
       break;
     }
 
-    // If the node isn't in the closed set of nodes already searched
+    // If the node isn't in the closed set of nodes already searched and not the end point
     else if (closed.find(pair<int, int> (px, py)) == closed.end()) {
+      //add the current coords to the list of coords that have already been searched
       closed.insert(pair<int, int> (px, py));
       vector<pair<int, int> > neighbors = map.get_neighbors(px, py);
-      cout << "Neighbors of priority: " << *priority << endl; 
-      for (const auto node : neighbors) {
-          cout << "(" << node.first << ", " << node.second << "), ";
-        }
-      cout << endl; 
+
       for (int i = 0; i < neighbors.size(); i++) {
         int nx = neighbors[i].first;
         int ny = neighbors[i].second;
         // If the neighbor is not in the closed set
         if (closed.find(neighbors[i]) == closed.end()) {
+
           int s_cost = priority->s_cost + approx_dist(px, py, nx, ny);
           int g_cost = approx_dist(end->x, end->y, nx, ny);
+          //if the neighbor has not already been searched, add it to the queue of nodes to be searched
           Node * current = new Node(nx, ny ,s_cost, g_cost, true, priority);
           // *current = {nx, ny ,s_cost, g_cost, true, priority}; 
           open.push(current);
